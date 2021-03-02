@@ -15,6 +15,7 @@ func main() {
 	cap := flag.Int("cap", 100, "server topic/user capacity")
 	flag.Parse()
 	ps := NewPubSub(*cap)
+	go ServiceDiscovery(ps)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	srv := &http.Server{

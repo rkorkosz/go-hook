@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -21,16 +24,18 @@ type Data struct {
 type DataChannel chan Data
 
 type PubSub struct {
-	rm   sync.RWMutex
-	subs map[string]map[string]DataChannel
-	cap  int
+	rm      sync.RWMutex
+	subs    map[string]map[string]DataChannel
+	cap     int
+	servers map[string]struct{}
 }
 
 func NewPubSub(cap int) *PubSub {
 	return &PubSub{
-		rm:   sync.RWMutex{},
-		subs: make(map[string]map[string]DataChannel, cap),
-		cap:  cap,
+		rm:      sync.RWMutex{},
+		subs:    make(map[string]map[string]DataChannel, cap),
+		cap:     cap,
+		servers: make(map[string]struct{}),
 	}
 }
 
@@ -60,15 +65,39 @@ func (ps *PubSub) Subscribe(id, topic string, ch DataChannel) error {
 	return nil
 }
 
-func (ps *PubSub) Publish(source, topic string, data []byte) {
-	if _, ok := ps.subs[topic]; !ok {
-		return
-	}
+func (ps *PubSub) Publish(source, topic string, data []byte, publishNext bool) {
 	ps.rm.RLock()
 	defer ps.rm.RUnlock()
 	for _, ch := range ps.subs[topic] {
+		log.Println("Publishing locally")
 		ch <- Data{Data: data, Source: source}
 	}
+	log.Println("Publish next")
+	if publishNext {
+		for srv := range ps.servers {
+			log.Printf("Publishing to remote %s", srv)
+			ps.PublishToServer(srv, source, topic, data)
+		}
+	}
+}
+
+func (ps *PubSub) PublishToServer(server, source, topic string, data []byte) {
+	uri := fmt.Sprintf("%s/%s/%s", server, topic, source)
+	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(data))
+	if err != nil {
+		log.Println(err)
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Println(err)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Origin", hostname)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Printf("Publish status code: %d", resp.StatusCode)
 }
 
 func (ps *PubSub) Unsubscribe(id, topic string) {
@@ -149,6 +178,9 @@ func publish(w http.ResponseWriter, r *http.Request, ps *PubSub) {
 
 	}
 	topic, source := chunks[0], chunks[1]
-	ps.Publish(source, topic, data)
+	log.Printf("publishing message to: %s", topic)
+	origin := r.Header.Get("Origin")
+	log.Printf("Origin: %s", origin)
+	ps.Publish(source, topic, data, origin == "")
 	w.WriteHeader(202)
 }

@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  proxy:
+    image: traefik:2.4
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+  go-hook:
+    image: go-hook
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.go-hook.rule=Host(`go-hook.local`)
+      - traefik.http.routers.go-hook.entrypoints=web
+      - traefik.http.services.go-hook.loadbalancer.server.port=8000
