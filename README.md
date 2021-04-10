@@ -1,3 +1,4 @@
+[![Go](https://github.com/rkorkosz/go-hook/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/rkorkosz/go-hook/actions/workflows/go.yml)
 # go-hook
 
 ## Overview
