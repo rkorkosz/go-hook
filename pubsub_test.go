@@ -69,7 +69,7 @@ func (s *stage) subscribe_was_succesful() *stage {
 
 func (s *stage) message_is_published_in_a_topic(source, topic, msg string) *stage {
 	s.messages = append(s.messages, msg)
-	s.pubSub.Publish(source, topic, []byte(msg))
+	s.pubSub.Publish(source, topic, []byte(msg), false)
 	return s
 }
 

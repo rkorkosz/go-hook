@@ -72,8 +72,8 @@ func (ps *PubSub) Publish(source, topic string, data []byte, publishNext bool) {
 		log.Println("Publishing locally")
 		ch <- Data{Data: data, Source: source}
 	}
-	log.Println("Publish next")
 	if publishNext {
+		log.Println("Publish next")
 		for srv := range ps.servers {
 			log.Printf("Publishing to remote %s", srv)
 			ps.PublishToServer(srv, source, topic, data)

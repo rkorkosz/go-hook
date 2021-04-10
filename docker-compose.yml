@@ -13,11 +13,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
   go-hook:
+    build: .
     image: go-hook
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     labels:
       - traefik.enable=true
-      - traefik.http.routers.go-hook.rule=Host(`go-hook.local`)
+      - traefik.http.routers.go-hook.rule=PathPrefix(`/`)
       - traefik.http.routers.go-hook.entrypoints=web
       - traefik.http.services.go-hook.loadbalancer.server.port=8000
