@@ -1,4 +1,4 @@
-package main
+package discovery
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func ServiceDiscovery(ps *PubSub) {
+func ServiceDiscovery(servers map[string]struct{}) {
 	pc, err := net.ListenPacket("udp4", ":8829")
 	if err != nil {
 		log.Fatal(err)
@@ -27,9 +27,9 @@ func ServiceDiscovery(ps *PubSub) {
 			return
 		}
 		server := string(buf[:n])
-		if _, ok := ps.servers[server]; !ok && server != endpoint {
-			ps.servers[string(buf[:n])] = struct{}{}
-			log.Printf("Servers: %s", ps.servers)
+		if _, ok := servers[server]; !ok && server != endpoint {
+			servers[string(buf[:n])] = struct{}{}
+			log.Printf("Servers: %s", servers)
 
 			_, err = pc.WriteTo([]byte(endpoint), addr)
 			if err != nil {

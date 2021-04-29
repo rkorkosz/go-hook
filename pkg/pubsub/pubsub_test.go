@@ -1,4 +1,4 @@
-package main
+package pubsub
 
 import (
 	"testing"
@@ -34,8 +34,7 @@ func newStage(t *testing.T) *stage {
 }
 
 func (s *stage) pubsub_is_created() *stage {
-	s.pubSub = NewPubSub(1)
-	s.t.Cleanup(s.pubSub.Close)
+	s.pubSub = New(1)
 	return s
 }
 
@@ -69,7 +68,7 @@ func (s *stage) subscribe_was_succesful() *stage {
 
 func (s *stage) message_is_published_in_a_topic(source, topic, msg string) *stage {
 	s.messages = append(s.messages, msg)
-	s.pubSub.Publish(source, topic, []byte(msg), false)
+	s.pubSub.Publish(source, topic, []byte(msg))
 	return s
 }
 

@@ -8,7 +8,7 @@ so servers can see each other as long as they are in the same network.
 
 ## Deployment
 
-    $ docker-compose up -d --scale go-hook=3
+    $ make docker
 
 ## Usage
 
