@@ -15,24 +15,26 @@ type Discovery struct {
 }
 
 func New(opts ...func(d *Discovery)) *Discovery {
-	hostname, err := os.Hostname()
-	if err != nil {
-		panic(err)
-	}
-	return &Discovery{
+	hostname, _ := os.Hostname()
+	d := Discovery{
 		current: fmt.Sprintf("http://%s:8000", hostname),
 		db:      make(map[string]struct{}),
 		log:     log.New(os.Stdout, "[DISCOVERY] ", log.LstdFlags),
 	}
+	for _, opt := range opts {
+		opt(&d)
+	}
+	return &d
 }
 
 func (s *Discovery) Iter() chan string {
 	out := make(chan string)
-	go func() {
+	go func(out chan string) {
 		for srv := range s.db {
 			out <- srv
 		}
-	}()
+		close(out)
+	}(out)
 	return out
 }
 
@@ -43,7 +45,10 @@ func (s *Discovery) Run(ctx context.Context) error {
 		return err
 	}
 	defer pc.Close()
-	broadcast(pc, s.current)
+	err = broadcast(pc, s.current)
+	if err != nil {
+		return err
+	}
 	for {
 		buf := make([]byte, 25)
 		n, addr, err := pc.ReadFrom(buf)
@@ -63,7 +68,8 @@ func (s *Discovery) Run(ctx context.Context) error {
 	}
 }
 
-func broadcast(pc net.PacketConn, endpoint string) {
-	addr, _ := net.ResolveUDPAddr("udp4", "255.255.255.255:8829")
-	pc.WriteTo([]byte(endpoint), addr)
+func broadcast(pc net.PacketConn, endpoint string) error {
+	addr, err := net.ResolveUDPAddr("udp4", "255.255.255.255:8829")
+	_, err = pc.WriteTo([]byte(endpoint), addr)
+	return err
 }

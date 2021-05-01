@@ -11,6 +11,6 @@ test:
 	go test -v ./...
 
 docker:
-	docker-compose up -d --scale go-hook=3
+	docker-compose up -d --build --scale go-hook=3
 
 .PHONY: http-single http-multi

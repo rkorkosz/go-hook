@@ -9,6 +9,7 @@ import (
 type Data struct {
 	Data   json.RawMessage `json:"data"`
 	Source string          `json:"source"`
+	Topic  string          `json:"topic"`
 }
 
 type DataChannel chan Data
@@ -27,29 +28,29 @@ func New(cap int) *PubSub {
 	}
 }
 
-func (ps *PubSub) Subscribe(id, topic string, ch DataChannel) error {
+func (ps *PubSub) Subscribe(id, topic string) (DataChannel, error) {
 	ps.rm.Lock()
 	defer ps.rm.Unlock()
 	if len(ps.subs) >= ps.cap {
-		return errors.New("new topics cannot be added")
+		return nil, errors.New("new topics cannot be added")
 	}
 	if _, ok := ps.subs[topic]; !ok {
 		ps.subs[topic] = make(map[string]DataChannel)
 	}
 	if len(ps.subs[topic]) >= ps.cap {
-		return errors.New("new ids cannot be added")
+		return nil, errors.New("new ids cannot be added")
 	}
 	if _, ok := ps.subs[topic][id]; !ok {
-		ps.subs[topic][id] = ch
+		ps.subs[topic][id] = make(DataChannel)
 	}
-	return nil
+	return ps.subs[topic][id], nil
 }
 
 func (ps *PubSub) Publish(source, topic string, data []byte) {
 	ps.rm.RLock()
 	defer ps.rm.RUnlock()
 	for _, ch := range ps.subs[topic] {
-		ch <- Data{Data: data, Source: source}
+		ch <- Data{Data: data, Source: source, Topic: topic}
 	}
 }
 
