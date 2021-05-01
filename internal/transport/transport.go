@@ -30,19 +30,22 @@ type pubSub interface {
 	Subscriber
 }
 
+type discovery interface {
+	Iter() chan string
+}
+
 type HTTP struct {
 	Server  *http.Server
-	Servers map[string]struct{}
+	Servers discovery
 	PubSub  pubSub
 	Log     *log.Logger
 }
 
 func NewHTTP(opts ...func(ht *HTTP)) *HTTP {
 	ht := &HTTP{
-		Server:  &http.Server{Addr: ":8000"},
-		PubSub:  pubsub.New(100),
-		Servers: make(map[string]struct{}),
-		Log:     log.New(os.Stdout, "", log.LstdFlags),
+		Server: &http.Server{Addr: ":8000"},
+		PubSub: pubsub.New(100),
+		Log:    log.New(os.Stdout, "", log.LstdFlags),
 	}
 	ht.Server.Handler = ht
 	for _, opt := range opts {
@@ -158,8 +161,8 @@ func (ht *HTTP) publish(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	ht.Log.Printf("Origin: %s", origin)
 	ht.PubSub.Publish(source, topic, data)
-	if origin == "" {
-		for srv := range ht.Servers {
+	if origin == "" && ht.Servers != nil {
+		for srv := range ht.Servers.Iter() {
 			ht.PublishToServer(srv, source, topic, data)
 		}
 	}
