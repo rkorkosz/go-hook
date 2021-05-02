@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/rkorkosz/go-hook/pkg/pubsub"
 )
 
@@ -98,11 +97,16 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	topic := r.URL.Path[1:]
+	chunks := strings.Split(r.URL.Path, "/")
+	if len(chunks) != 3 {
+		http.Error(w, "path should be as follows /topic/name", http.StatusBadRequest)
+		return
+	}
+	topic := chunks[1]
+	source := chunks[2]
 	ht.Log.Printf("subscribing to %s", topic)
 
-	id := uuid.New().String()
-	ch, err := ht.PubSub.Subscribe(id, topic)
+	ch, err := ht.PubSub.Subscribe(source, topic)
 	if err != nil {
 		ht.Log.Println(err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -117,7 +121,7 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		case <-r.Context().Done():
 			ht.Log.Println("Unsubscribe")
-			ht.PubSub.Unsubscribe(id, topic)
+			ht.PubSub.Unsubscribe(source, topic)
 			return
 		}
 	}

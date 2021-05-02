@@ -39,9 +39,11 @@ func (s *stage) pubsub_is_created() *stage {
 }
 
 func (s *stage) user_is_subscribed_to_a_topic(user, topic string) *stage {
-	ch := make(DataChannel, 1)
+	ch, err := s.pubSub.Subscribe(user, topic)
+	if err != nil {
+		s.t.Error(err)
+	}
 	s.chans = append(s.chans, ch)
-	s.pubSub.Subscribe(user, topic, ch)
 	s.topics = append(s.topics, topic)
 	s.users = append(s.users, user)
 	return s
