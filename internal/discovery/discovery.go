@@ -6,20 +6,23 @@ import (
 	"log"
 	"net"
 	"os"
+	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 type Discovery struct {
-	current string
+	Current string
 	db      map[string]struct{}
-	log     *log.Logger
+	Log     *log.Logger
 }
 
 func New(opts ...func(d *Discovery)) *Discovery {
 	hostname, _ := os.Hostname()
 	d := Discovery{
-		current: fmt.Sprintf("http://%s:8000", hostname),
+		Current: fmt.Sprintf("http://%s:8000", hostname),
 		db:      make(map[string]struct{}),
-		log:     log.New(os.Stdout, "[DISCOVERY] ", log.LstdFlags),
+		Log:     log.New(os.Stdout, "[DISCOVERY] ", log.LstdFlags),
 	}
 	for _, opt := range opts {
 		opt(&d)
@@ -39,13 +42,24 @@ func (s *Discovery) Iter() chan string {
 }
 
 func (s *Discovery) Run(ctx context.Context) error {
-	var lc net.ListenConfig
+	lc := net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			var opErr error
+			err := c.Control(func(fd uintptr) {
+				opErr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
+			})
+			if err != nil {
+				return err
+			}
+			return opErr
+		},
+	}
 	pc, err := lc.ListenPacket(ctx, "udp4", ":8829")
 	if err != nil {
 		return err
 	}
 	defer pc.Close()
-	err = broadcast(pc, s.current)
+	err = broadcast(pc, s.Current)
 	if err != nil {
 		return err
 	}
@@ -56,11 +70,11 @@ func (s *Discovery) Run(ctx context.Context) error {
 			return err
 		}
 		server := string(buf[:n])
-		if _, ok := s.db[server]; !ok && server != s.current {
+		if _, ok := s.db[server]; !ok && server != s.Current {
 			s.db[string(buf[:n])] = struct{}{}
-			s.log.Printf("Servers: %s", s.db)
+			s.Log.Printf("Servers: %s", s.db)
 
-			_, err = pc.WriteTo([]byte(s.current), addr)
+			_, err = pc.WriteTo([]byte(s.Current), addr)
 			if err != nil {
 				return err
 			}
