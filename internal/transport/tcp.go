@@ -13,8 +13,8 @@ import (
 
 // TCP implements transport interface over tcp protocol
 type TCP struct {
-	Servers     servers
-	PubSub      pubSub
+	Servers     Servers
+	PubSub      PubSub
 	Config      net.ListenConfig
 	Log         *log.Logger
 	PubAddress  string

@@ -13,6 +13,7 @@ test:
 docker:
 	docker-compose up -d --build --scale go-hook=3
 
-build: http-single http-multi
+lint:
+	golangci-lint run
 
-.PHONY: http-single http-multi
+build: http-single http-multi

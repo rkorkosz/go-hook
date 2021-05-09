@@ -18,8 +18,8 @@ import (
 // HTTP represents transport over HTTP protocol
 type HTTP struct {
 	Server  *http.Server
-	Servers servers
-	PubSub  pubSub
+	Servers Servers
+	PubSub  PubSub
 	Log     *log.Logger
 }
 

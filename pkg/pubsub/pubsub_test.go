@@ -1,87 +1,47 @@
 package pubsub
 
-import (
-	"testing"
-)
+import "testing"
 
-func Test_Subscribe(t *testing.T) {
-	s := newStage(t)
-	s.pubsub_is_created().
-		user_is_subscribed_to_a_topic("user", "topic").
-		subscribe_was_succesful()
-}
-
-func Test_Publish(t *testing.T) {
-	s := newStage(t)
-	s.pubsub_is_created().
-		user_is_subscribed_to_a_topic("user", "topic").
-		subscribe_was_succesful().
-		message_is_published_in_a_topic("user", "topic", `{"a": 1}`).
-		message_was_succesfully_received()
-}
-
-type stage struct {
-	t        testing.TB
-	pubSub   *PubSub
-	topics   []string
-	users    []string
-	chans    []DataChannel
-	messages []string
-}
-
-func newStage(t *testing.T) *stage {
-	return &stage{t: t}
-}
-
-func (s *stage) pubsub_is_created() *stage {
-	s.pubSub = New(1)
-	return s
-}
-
-func (s *stage) user_is_subscribed_to_a_topic(user, topic string) *stage {
-	ch, err := s.pubSub.Subscribe(user, topic)
+func TestPubSubSingleSubscriber(t *testing.T) {
+	t.Parallel()
+	ps := New(2)
+	ch, err := ps.Subscribe("user", "topic")
 	if err != nil {
-		s.t.Error(err)
+		t.Error(err)
 	}
-	s.chans = append(s.chans, ch)
-	s.topics = append(s.topics, topic)
-	s.users = append(s.users, user)
-	return s
+	expected := `{"a":1}`
+	go ps.Publish("user", "topic", []byte(expected))
+	for out := range ch {
+		if string(out.Data) != expected {
+			t.Errorf("want: %s, got: %s", expected, string(out.Data))
+		}
+		close(ch)
+	}
 }
 
-func (s *stage) subscribe_was_succesful() *stage {
-	for _, topic := range s.topics {
-		_, ok := s.pubSub.subs[topic]
-		if !ok {
-			s.t.Error("subscribe did not succeeded")
-		}
-		for _, user := range s.users {
-			ch, ok := s.pubSub.subs[topic][user]
-			if !ok {
-				s.t.Error("subscribe did not succeeded")
-			}
-			if ch == nil {
-				s.t.Error("channel was not set")
-			}
-		}
+func TestPubSubMultiSubscribers(t *testing.T) {
+	t.Parallel()
+	ps := New(3)
+	ch1, err := ps.Subscribe("user1", "topic")
+	if err != nil {
+		t.Error(err)
 	}
-	return s
-}
-
-func (s *stage) message_is_published_in_a_topic(source, topic, msg string) *stage {
-	s.messages = append(s.messages, msg)
-	s.pubSub.Publish(source, topic, []byte(msg))
-	return s
-}
-
-func (s *stage) message_was_succesfully_received() *stage {
-	for _, msg := range s.messages {
-		for _, ch := range s.chans {
-			m := <-ch
-			if string(m.Data) != msg {
-				s.t.Error("message was not received")
-			}
-		}
+	ch2, err := ps.Subscribe("user2", "topic")
+	if err != nil {
+		t.Error(err)
 	}
-	return s
+	expected := `{"a":1}`
+	go ps.Publish("user", "topic", []byte(expected))
+	for out := range ch1 {
+		if string(out.Data) != expected {
+			t.Errorf("want: %s, got: %s", expected, string(out.Data))
+		}
+		close(ch1)
+	}
+	for out := range ch2 {
+		if string(out.Data) != expected {
+			t.Errorf("want: %s, got: %s", expected, string(out.Data))
+		}
+		close(ch2)
+	}
 }

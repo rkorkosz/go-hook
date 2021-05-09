@@ -13,11 +13,11 @@ type Publisher interface {
 	Publish(source, topic string, data []byte)
 }
 
-type pubSub interface {
+type PubSub interface {
 	Publisher
 	Subscriber
 }
 
-type servers interface {
+type Servers interface {
 	Iter() chan string
 }
