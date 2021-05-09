@@ -11,18 +11,33 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Discovery holds all discovered servers
 type Discovery struct {
-	Current string
-	db      map[string]struct{}
-	Log     *log.Logger
+	Current      string
+	db           map[string]struct{}
+	Log          *log.Logger
+	ListenConfig net.ListenConfig
 }
 
+// New creates discovery object
 func New(opts ...func(d *Discovery)) *Discovery {
 	hostname, _ := os.Hostname()
 	d := Discovery{
 		Current: fmt.Sprintf("http://%s:8000", hostname),
 		db:      make(map[string]struct{}),
 		Log:     log.New(os.Stdout, "[DISCOVERY] ", log.LstdFlags),
+		ListenConfig: net.ListenConfig{
+			Control: func(network, address string, c syscall.RawConn) error {
+				var opErr error
+				err := c.Control(func(fd uintptr) {
+					opErr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
+				})
+				if err != nil {
+					return err
+				}
+				return opErr
+			},
+		},
 	}
 	for _, opt := range opts {
 		opt(&d)
@@ -30,6 +45,7 @@ func New(opts ...func(d *Discovery)) *Discovery {
 	return &d
 }
 
+// Iter creates an iterator that iterates over all the servers in db
 func (s *Discovery) Iter() chan string {
 	out := make(chan string)
 	go func(out chan string) {
@@ -41,31 +57,21 @@ func (s *Discovery) Iter() chan string {
 	return out
 }
 
+// Run creates a loop that performs a server discovery
 func (s *Discovery) Run(ctx context.Context) error {
-	lc := net.ListenConfig{
-		Control: func(network, address string, c syscall.RawConn) error {
-			var opErr error
-			err := c.Control(func(fd uintptr) {
-				opErr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
-			})
-			if err != nil {
-				return err
-			}
-			return opErr
-		},
-	}
-	pc, err := lc.ListenPacket(ctx, "udp4", ":8829")
+	pc, err := s.ListenConfig.ListenPacket(ctx, "udp", ":8829")
 	if err != nil {
 		return err
 	}
 	defer pc.Close()
-	err = broadcast(pc, s.Current)
+	addr, err := net.ResolveUDPAddr("udp", "255.255.255.255:8829")
+	_, err = pc.WriteTo([]byte(s.Current), addr)
 	if err != nil {
 		return err
 	}
 	for {
-		buf := make([]byte, 25)
-		n, addr, err := pc.ReadFrom(buf)
+		buf := make([]byte, 50)
+		n, _, err := pc.ReadFrom(buf)
 		if err != nil {
 			return err
 		}
@@ -80,10 +86,4 @@ func (s *Discovery) Run(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-func broadcast(pc net.PacketConn, endpoint string) error {
-	addr, err := net.ResolveUDPAddr("udp4", "255.255.255.255:8829")
-	_, err = pc.WriteTo([]byte(endpoint), addr)
-	return err
 }
