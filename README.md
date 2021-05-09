@@ -10,6 +10,13 @@ so servers can see each other as long as they are in the same network.
 
     $ make docker
 
+Alternatively you can build it and run it as any other executable:
+
+    $ make build
+    $ ./htm -bind :8000
+    $ ./htm -bind :8001
+    $ ./htm -bind :8002
+
 ## Usage
 
 You can subscribe to a topic by opening your browser at `http://localhost/topic`.
