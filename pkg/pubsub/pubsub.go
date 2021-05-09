@@ -6,20 +6,24 @@ import (
 	"sync"
 )
 
+// Data represents data message
 type Data struct {
 	Data   json.RawMessage `json:"data"`
 	Source string          `json:"source"`
 	Topic  string          `json:"topic"`
 }
 
+// DataChannel holds one subscription channel
 type DataChannel chan Data
 
+// PubSub implements publish subscribe pattern
 type PubSub struct {
 	rm   sync.RWMutex
 	subs map[string]map[string]DataChannel
 	cap  int
 }
 
+// New creates PubSub object
 func New(cap int) *PubSub {
 	return &PubSub{
 		rm:   sync.RWMutex{},
@@ -28,6 +32,7 @@ func New(cap int) *PubSub {
 	}
 }
 
+// Subscribe creates new DataChannel as subscription to send messages
 func (ps *PubSub) Subscribe(id, topic string) (DataChannel, error) {
 	ps.rm.Lock()
 	defer ps.rm.Unlock()
@@ -46,6 +51,7 @@ func (ps *PubSub) Subscribe(id, topic string) (DataChannel, error) {
 	return ps.subs[topic][id], nil
 }
 
+// Publish sends a message to DataChannel
 func (ps *PubSub) Publish(source, topic string, data []byte) {
 	ps.rm.RLock()
 	defer ps.rm.RUnlock()
@@ -54,6 +60,7 @@ func (ps *PubSub) Publish(source, topic string, data []byte) {
 	}
 }
 
+// Unsubscribe removes DataChannel subscription from local cache
 func (ps *PubSub) Unsubscribe(id, topic string) {
 	if _, ok := ps.subs[topic]; !ok {
 		return

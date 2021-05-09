@@ -11,6 +11,7 @@ import (
 	"github.com/rkorkosz/go-hook/pkg/pubsub"
 )
 
+// TCP implements transport interface over tcp protocol
 type TCP struct {
 	Servers     servers
 	PubSub      pubSub
@@ -23,6 +24,7 @@ type TCP struct {
 	subListener net.Listener
 }
 
+// NewTCP creates new TCP object
 func NewTCP(opts ...func(*TCP)) *TCP {
 	t := TCP{
 		PubSub:     pubsub.New(100),
@@ -37,19 +39,23 @@ func NewTCP(opts ...func(*TCP)) *TCP {
 	return &t
 }
 
+// Wait blocks until all listeners started
 func (t *TCP) Wait() {
 	<-t.started
 	<-t.started
 }
 
+// PubAddr returns tcp address used for publishing messages
 func (t *TCP) PubAddr() string {
 	return t.pubListener.Addr().String()
 }
 
+// SubAddr returns tcp address used for subscribing to topics
 func (t *TCP) SubAddr() string {
 	return t.subListener.Addr().String()
 }
 
+// Run creates a main tcp transport loop
 func (t *TCP) Run(ctx context.Context) error {
 	errCh := make(chan error)
 
@@ -68,7 +74,7 @@ func (t *TCP) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		err = t.subListener.Close()
+		_ = t.subListener.Close()
 		err = t.pubListener.Close()
 		return err
 	case err := <-errCh:
@@ -126,7 +132,7 @@ func (t *TCP) handleSub(conn net.Conn) {
 			return
 		}
 		for m := range ch {
-			enc.Encode(m)
+			_ = enc.Encode(m)
 		}
 	}
 }

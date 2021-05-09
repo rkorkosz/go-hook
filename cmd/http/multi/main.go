@@ -28,7 +28,12 @@ func main() {
 	})
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	go servers.Run(ctx)
+	go func(ctx context.Context) {
+		err := servers.Run(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(ctx)
 	err = t.Run(ctx)
 	if err != nil {
 		log.Fatal(err)

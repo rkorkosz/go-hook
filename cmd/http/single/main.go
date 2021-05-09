@@ -15,13 +15,9 @@ func main() {
 	ht := transport.NewHTTP(func(ht *transport.HTTP) {
 		ht.PubSub = ps
 	})
-	t := transport.NewTCP(func(t *transport.TCP) {
-		t.PubSub = ps
-	})
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	go ht.Run(ctx)
-	err := t.Run(ctx)
+	err := ht.Run(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -65,6 +65,9 @@ func (s *Discovery) Run(ctx context.Context) error {
 	}
 	defer pc.Close()
 	addr, err := net.ResolveUDPAddr("udp", "255.255.255.255:8829")
+	if err != nil {
+		return err
+	}
 	_, err = pc.WriteTo([]byte(s.Current), addr)
 	if err != nil {
 		return err

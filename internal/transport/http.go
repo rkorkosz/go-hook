@@ -15,6 +15,7 @@ import (
 	"github.com/rkorkosz/go-hook/pkg/pubsub"
 )
 
+// HTTP represents transport over HTTP protocol
 type HTTP struct {
 	Server  *http.Server
 	Servers servers
@@ -22,6 +23,7 @@ type HTTP struct {
 	Log     *log.Logger
 }
 
+// NewHTTP creates HTTP object with sensible defaults
 func NewHTTP(opts ...func(ht *HTTP)) *HTTP {
 	ht := &HTTP{
 		Server: &http.Server{Addr: ":8000"},
@@ -35,6 +37,7 @@ func NewHTTP(opts ...func(ht *HTTP)) *HTTP {
 	return ht
 }
 
+// Run creates a main transport loop
 func (ht *HTTP) Run(ctx context.Context) error {
 	errCh := make(chan error)
 	defer close(errCh)
@@ -57,7 +60,19 @@ func (ht *HTTP) Run(ctx context.Context) error {
 	return nil
 }
 
-func (ht *HTTP) PublishToServer(server, source, topic string, data []byte) {
+// ServeHTTP implements http.Handler interface
+func (ht *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		ht.subscribe(w, r)
+	case "POST":
+		ht.publish(w, r)
+	default:
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	}
+}
+
+func (ht *HTTP) publishToServer(server, source, topic string, data []byte) {
 	uri := fmt.Sprintf("%s/%s/%s", server, topic, source)
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(data))
 	if err != nil {
@@ -74,17 +89,6 @@ func (ht *HTTP) PublishToServer(server, source, topic string, data []byte) {
 		ht.Log.Println(err)
 	}
 	ht.Log.Printf("Publish status code: %d", resp.StatusCode)
-}
-
-func (ht *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		ht.subscribe(w, r)
-	case "POST":
-		ht.publish(w, r)
-	default:
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-	}
 }
 
 func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +121,7 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case m := <-ch:
-			enc.Encode(m)
+			_ = enc.Encode(m)
 			flusher.Flush()
 		case <-r.Context().Done():
 			ht.Log.Println("Unsubscribe")
@@ -149,7 +153,7 @@ func (ht *HTTP) publish(w http.ResponseWriter, r *http.Request) {
 	ht.PubSub.Publish(source, topic, data)
 	if origin == "" && ht.Servers != nil {
 		for srv := range ht.Servers.Iter() {
-			go ht.PublishToServer(srv, source, topic, data)
+			go ht.publishToServer(srv, source, topic, data)
 		}
 	}
 	w.WriteHeader(202)

@@ -67,7 +67,10 @@ func newStage(t *testing.T) *stage {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go tcp.Run(ctx)
+	go func(ctx context.Context) {
+		err := tcp.Run(ctx)
+		t.Error(err)
+	}(ctx)
 	tcp.Wait()
 	s := &stage{
 		t:    t,
