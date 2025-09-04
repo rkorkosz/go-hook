@@ -1,5 +1,5 @@
 module github.com/rkorkosz/go-hook
 
-go 1.16
+go 1.25
 
-require golang.org/x/sys v0.0.0-20210507161434-a76c4d0a0096
+require golang.org/x/sys v0.35.0
