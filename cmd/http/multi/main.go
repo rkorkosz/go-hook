@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 
@@ -22,12 +23,15 @@ func main() {
 	servers := discovery.New(func(d *discovery.Discovery) {
 		d.Current = fmt.Sprintf("http://%s%s", hostname, *addr)
 	})
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
 	t := transport.NewHTTP(func(ht *transport.HTTP) {
 		ht.Server.Addr = *addr
 		ht.Servers = servers
+		ht.Server.BaseContext = func(net.Listener) context.Context {
+			return ctx
+		}
 	})
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
 	go func(ctx context.Context) {
 		err := servers.Run(ctx)
 		if err != nil {

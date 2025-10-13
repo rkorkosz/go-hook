@@ -42,7 +42,7 @@ func (ht *HTTP) Run(ctx context.Context) error {
 	errCh := make(chan error)
 	defer close(errCh)
 	go func() {
-		ht.Log.Println("Starting server")
+		ht.Log.Printf("Starting server on addr %s\n", ht.Server.Addr)
 		if err := ht.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
@@ -92,17 +92,13 @@ func (ht *HTTP) publishToServer(server, source, topic string, data []byte) {
 }
 
 func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-		return
-	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
+	rc := http.NewResponseController(w)
 	chunks := strings.Split(r.URL.Path, "/")
-	if len(chunks) != 3 {
+	if len(chunks) < 2 {
 		http.Error(w, "path should be as follows /topic/name", http.StatusBadRequest)
 		return
 	}
@@ -116,13 +112,13 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	flusher.Flush()
+	rc.Flush()
 	enc := json.NewEncoder(w)
 	for {
 		select {
 		case m := <-ch:
 			_ = enc.Encode(m)
-			flusher.Flush()
+			rc.Flush()
 		case <-r.Context().Done():
 			ht.Log.Println("Unsubscribe")
 			ht.PubSub.Unsubscribe(source, topic)
