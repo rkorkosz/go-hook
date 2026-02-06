@@ -140,7 +140,6 @@ func (ht *HTTP) publish(w http.ResponseWriter, r *http.Request) {
 	if len(chunks) < 2 {
 		http.Error(w, "please provide topic and id in path (/topic/id)", http.StatusBadRequest)
 		return
-
 	}
 	topic, source := chunks[0], chunks[1]
 	ht.Log.Printf("publishing message to: %s", topic)
