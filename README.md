@@ -17,6 +17,28 @@ Alternatively you can build it and run it as any other executable:
     $ ./htm -bind :8001
     $ ./htm -bind :8002
 
+### systemd
+
+A systemd template unit for the distributed HTTP service is available at
+`deploy/systemd/go-hook-http-multi@.service`. Build the binary, install it, then enable one or more
+instances by port:
+
+    $ make http-multi
+    $ sudo useradd --system --no-create-home go-hook
+    $ sudo cp htm /usr/local/bin/htm
+    $ sudo cp deploy/systemd/go-hook-http-multi@.service /etc/systemd/system/
+    $ sudo systemctl daemon-reload
+    $ sudo systemctl enable --now go-hook-http-multi@8000
+    $ sudo systemctl enable --now go-hook-http-multi@8001
+    $ sudo systemctl enable --now go-hook-http-multi@8002
+
+Check service status and logs with:
+
+    $ systemctl status go-hook-http-multi@8000
+    $ journalctl -u go-hook-http-multi@8000 -f
+
+Each instance runs `htm -bind :<port>`.
+
 ## Usage
 
 You can subscribe to a topic by opening your browser at `http://localhost/topic`.
