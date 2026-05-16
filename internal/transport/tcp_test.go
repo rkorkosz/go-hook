@@ -73,7 +73,7 @@ func TestTCPPublishesToSubscriber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer subConn.Close()
+	defer func() { _ = subConn.Close() }()
 	if err := json.NewEncoder(subConn).Encode(pubsub.Data{Source: "subscriber", Topic: "topic"}); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestTCPPublishesToSubscriber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pubConn.Close()
+	defer func() { _ = pubConn.Close() }()
 	if err := json.NewEncoder(pubConn).Encode(pubsub.Data{Source: "source", Topic: "topic", Data: []byte(`{"hello":"world"}`)}); err != nil {
 		t.Fatal(err)
 	}

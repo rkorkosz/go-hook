@@ -63,7 +63,7 @@ func (s *Discovery) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer pc.Close()
+	defer func() { _ = pc.Close() }()
 	addr, err := net.ResolveUDPAddr("udp", "255.255.255.255:8829")
 	if err != nil {
 		return err

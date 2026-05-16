@@ -92,7 +92,7 @@ func (ht *HTTP) publishToServer(server, source, topic string, data []byte) {
 		ht.Log.Println(err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	ht.Log.Printf("Publish status code: %d", resp.StatusCode)
 }
@@ -121,7 +121,10 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	rc.Flush()
+	if err := rc.Flush(); err != nil {
+		ht.Log.Println(err)
+		return
+	}
 	enc := json.NewEncoder(w)
 	for {
 		select {
@@ -130,7 +133,10 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			_ = enc.Encode(m)
-			rc.Flush()
+			if err := rc.Flush(); err != nil {
+				ht.Log.Println(err)
+				return
+			}
 		case <-r.Context().Done():
 			ht.Log.Println("Unsubscribe")
 			ht.PubSub.Unsubscribe(source, topic)
@@ -140,7 +146,7 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ht *HTTP) publish(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
 		ht.Log.Println(err)

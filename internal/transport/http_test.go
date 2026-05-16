@@ -14,7 +14,7 @@ func TestPublishToServer(t *testing.T) {
 	body := `{"hello":"world"}`
 	requestSeen := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 
 		if r.Method != http.MethodPost {
 			t.Errorf("want method %s, got %s", http.MethodPost, r.Method)

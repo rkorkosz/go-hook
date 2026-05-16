@@ -106,7 +106,7 @@ func (t *TCP) run(ctx context.Context, errCh chan error, handle func(net.Conn), 
 }
 
 func (t *TCP) handlePub(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	dec := json.NewDecoder(conn)
 	for {
 		var data pubsub.Data
@@ -122,7 +122,7 @@ func (t *TCP) handlePub(conn net.Conn) {
 }
 
 func (t *TCP) handleSub(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	var data pubsub.Data
 	if err := json.NewDecoder(conn).Decode(&data); err != nil {
