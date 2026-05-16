@@ -92,18 +92,21 @@ func (ht *HTTP) publishToServer(server, source, topic string, data []byte) {
 }
 
 func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
+	topic, err := subscribePath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "please provide topic in path (/topic)", http.StatusBadRequest)
+		return
+	}
+	source := r.RemoteAddr
+	if source == "" {
+		source = "local"
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
 	rc := http.NewResponseController(w)
-	chunks := strings.Split(r.URL.Path, "/")
-	if len(chunks) < 2 {
-		http.Error(w, "path should be as follows /topic/name", http.StatusBadRequest)
-		return
-	}
-	topic := chunks[1]
-	source := chunks[2]
 	ht.Log.Printf("subscribing to %s", topic)
 
 	ch, err := ht.PubSub.Subscribe(source, topic)
@@ -116,7 +119,10 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	for {
 		select {
-		case m := <-ch:
+		case m, ok := <-ch:
+			if !ok {
+				return
+			}
 			_ = enc.Encode(m)
 			rc.Flush()
 		case <-r.Context().Done():
@@ -136,12 +142,11 @@ func (ht *HTTP) publish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chunks := strings.Split(r.URL.Path[1:], "/")
-	if len(chunks) < 2 {
+	topic, source, err := publishPath(r.URL.Path)
+	if err != nil {
 		http.Error(w, "please provide topic and id in path (/topic/id)", http.StatusBadRequest)
 		return
 	}
-	topic, source := chunks[0], chunks[1]
 	ht.Log.Printf("publishing message to: %s", topic)
 
 	origin := r.Header.Get("Origin")
@@ -152,4 +157,35 @@ func (ht *HTTP) publish(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(202)
+}
+
+func subscribePath(path string) (string, error) {
+	parts := pathParts(path)
+	if len(parts) != 1 {
+		return "", fmt.Errorf("invalid subscribe path")
+	}
+	return parts[0], nil
+}
+
+func publishPath(path string) (topic, source string, err error) {
+	parts := pathParts(path)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid publish path")
+	}
+	return parts[0], parts[1], nil
+}
+
+func pathParts(path string) []string {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		return nil
+	}
+
+	parts := strings.Split(path, "/")
+	for _, part := range parts {
+		if part == "" {
+			return nil
+		}
+	}
+	return parts
 }
