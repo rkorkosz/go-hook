@@ -77,17 +77,24 @@ func (ht *HTTP) publishToServer(server, source, topic string, data []byte) {
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(data))
 	if err != nil {
 		ht.Log.Println(err)
+		return
 	}
+
 	hostname, err := os.Hostname()
 	if err != nil {
 		ht.Log.Println(err)
+		return
 	}
+
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Origin", hostname)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		ht.Log.Println(err)
+		return
 	}
+	defer resp.Body.Close()
+
 	ht.Log.Printf("Publish status code: %d", resp.StatusCode)
 }
 

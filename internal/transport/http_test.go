@@ -1,6 +1,60 @@
 package transport
 
-import "testing"
+import (
+	"io"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestPublishToServer(t *testing.T) {
+	t.Parallel()
+
+	body := `{"hello":"world"}`
+	requestSeen := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		if r.Method != http.MethodPost {
+			t.Errorf("want method %s, got %s", http.MethodPost, r.Method)
+		}
+		if r.URL.Path != "/topic/source" {
+			t.Errorf("want path /topic/source, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("want content type application/json, got %s", got)
+		}
+		if got := r.Header.Get("Origin"); got == "" {
+			t.Error("expected origin header")
+		}
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if string(data) != body {
+			t.Errorf("want body %s, got %s", body, string(data))
+		}
+		requestSeen <- struct{}{}
+	}))
+	defer server.Close()
+
+	ht := &HTTP{Log: log.New(io.Discard, "", 0)}
+	ht.publishToServer(server.URL, "source", "topic", []byte(body))
+
+	select {
+	case <-requestSeen:
+	default:
+		t.Fatal("server did not receive publish")
+	}
+}
+
+func TestPublishToServerInvalidURLDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	ht := &HTTP{Log: log.New(io.Discard, "", 0)}
+	ht.publishToServer("://bad-url", "source", "topic", []byte(`{"hello":"world"}`))
+}
 
 func TestSubscribePath(t *testing.T) {
 	t.Parallel()
