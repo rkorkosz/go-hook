@@ -39,8 +39,7 @@ func NewHTTP(opts ...func(ht *HTTP)) *HTTP {
 
 // Run creates a main transport loop
 func (ht *HTTP) Run(ctx context.Context) error {
-	errCh := make(chan error)
-	defer close(errCh)
+	errCh := make(chan error, 1)
 	go func() {
 		ht.Log.Printf("Starting server on addr %s\n", ht.Server.Addr)
 		if err := ht.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
