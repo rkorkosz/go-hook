@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -31,7 +32,7 @@ func NewTCP(opts ...func(*TCP)) *TCP {
 		PubAddress: ":9000",
 		SubAddress: ":9001",
 		Log:        log.New(os.Stdout, "[TCP] ", log.LstdFlags),
-		started:    make(chan struct{}),
+		started:    make(chan struct{}, 2),
 	}
 	for _, opt := range opts {
 		opt(&t)
@@ -57,7 +58,7 @@ func (t *TCP) SubAddr() string {
 
 // Run creates a main tcp transport loop
 func (t *TCP) Run(ctx context.Context) error {
-	errCh := make(chan error)
+	errCh := make(chan error, 2)
 
 	var err error
 	t.subListener, err = t.run(ctx, errCh, t.handleSub, t.SubAddress)
@@ -75,10 +76,9 @@ func (t *TCP) Run(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		_ = t.subListener.Close()
-		err = t.pubListener.Close()
-		return err
+		_ = t.pubListener.Close()
+		return nil
 	case err := <-errCh:
-		close(errCh)
 		return err
 	}
 }
@@ -93,7 +93,11 @@ func (t *TCP) run(ctx context.Context, errCh chan error, handle func(net.Conn), 
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
+				if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
+					return
+				}
 				errCh <- err
+				return
 			}
 			go handle(conn)
 		}
@@ -108,7 +112,9 @@ func (t *TCP) handlePub(conn net.Conn) {
 		var data pubsub.Data
 		err := dec.Decode(&data)
 		if err != nil {
-			t.Log.Println(err)
+			if err != io.EOF {
+				t.Log.Println(err)
+			}
 			return
 		}
 		t.PubSub.Publish(data.Source, data.Topic, data.Data)
@@ -117,22 +123,40 @@ func (t *TCP) handlePub(conn net.Conn) {
 
 func (t *TCP) handleSub(conn net.Conn) {
 	defer conn.Close()
-	dec := json.NewDecoder(conn)
+
+	var data pubsub.Data
+	if err := json.NewDecoder(conn).Decode(&data); err != nil {
+		if err != io.EOF {
+			t.Log.Println(err)
+		}
+		return
+	}
+
+	ch, err := t.PubSub.Subscribe(data.Source, data.Topic)
+	if err != nil {
+		t.Log.Println(err)
+		return
+	}
+	defer t.PubSub.Unsubscribe(data.Source, data.Topic)
+
+	connDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, conn)
+		close(connDone)
+	}()
+
 	enc := json.NewEncoder(conn)
 	for {
-		var data pubsub.Data
-		err := dec.Decode(&data)
-		if err != nil && err == io.EOF {
-			t.PubSub.Unsubscribe(data.Source, data.Topic)
+		select {
+		case m, ok := <-ch:
+			if !ok {
+				return
+			}
+			if err := enc.Encode(m); err != nil {
+				return
+			}
+		case <-connDone:
 			return
-		}
-		ch, err := t.PubSub.Subscribe(data.Source, data.Topic)
-		if err != nil {
-			t.Log.Println(err)
-			return
-		}
-		for m := range ch {
-			_ = enc.Encode(m)
 		}
 	}
 }
