@@ -61,15 +61,17 @@ func (s *subscription) close() {
 type PubSub struct {
 	rm   sync.RWMutex
 	subs map[string]map[string]*subscription
-	cap  int
+	// maxTopics caps the number of distinct topics.
+	// Both the topic count and per-topic subscriber count share this limit.
+	maxTopics int
 }
 
-// New creates PubSub object
+// New creates PubSub object. The cap argument limits the total number of
+// distinct topics (and also the number of subscribers per topic).
 func New(cap int) *PubSub {
 	return &PubSub{
-		rm:   sync.RWMutex{},
-		subs: make(map[string]map[string]*subscription, cap),
-		cap:  cap,
+		subs:      make(map[string]map[string]*subscription, cap),
+		maxTopics: cap,
 	}
 }
 
@@ -79,7 +81,7 @@ func (ps *PubSub) Subscribe(id, topic string) (DataChannel, error) {
 	defer ps.rm.Unlock()
 
 	if _, ok := ps.subs[topic]; !ok {
-		if len(ps.subs) >= ps.cap {
+		if len(ps.subs) >= ps.maxTopics {
 			return nil, errors.New("new topics cannot be added")
 		}
 		ps.subs[topic] = make(map[string]*subscription)
@@ -89,7 +91,7 @@ func (ps *PubSub) Subscribe(id, topic string) (DataChannel, error) {
 		return sub.ch, nil
 	}
 
-	if len(ps.subs[topic]) >= ps.cap {
+	if len(ps.subs[topic]) >= ps.maxTopics {
 		return nil, errors.New("new ids cannot be added")
 	}
 

@@ -17,10 +17,12 @@ import (
 
 // HTTP represents transport over HTTP protocol
 type HTTP struct {
-	Server  *http.Server
-	Servers Servers
-	PubSub  PubSub
-	Log     *log.Logger
+	Server       *http.Server
+	Servers      Servers
+	PubSub       PubSub
+	Log          *log.Logger
+	remoteClient *http.Client
+	fanoutLimit  chan struct{} // limits concurrent cross-server publishes
 }
 
 // NewHTTP creates HTTP object with sensible defaults
@@ -29,6 +31,10 @@ func NewHTTP(opts ...func(ht *HTTP)) *HTTP {
 		Server: &http.Server{Addr: ":8000"},
 		PubSub: pubsub.New(100),
 		Log:    log.New(os.Stdout, "[HTTP] ", log.LstdFlags),
+		remoteClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
+		fanoutLimit: make(chan struct{}, 10), // at most 10 concurrent fan-out goroutines
 	}
 	ht.Server.Handler = ht
 	for _, opt := range opts {
@@ -72,6 +78,10 @@ func (ht *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ht *HTTP) publishToServer(server, source, topic string, data []byte) {
+	if ht.fanoutLimit != nil {
+		defer func() { <-ht.fanoutLimit }()
+	}
+
 	uri := fmt.Sprintf("%s/%s/%s", server, topic, source)
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(data))
 	if err != nil {
@@ -87,7 +97,11 @@ func (ht *HTTP) publishToServer(server, source, topic string, data []byte) {
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Origin", hostname)
-	resp, err := http.DefaultClient.Do(req)
+	client := ht.remoteClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		ht.Log.Println(err)
 		return
@@ -165,6 +179,9 @@ func (ht *HTTP) publish(w http.ResponseWriter, r *http.Request) {
 	ht.PubSub.Publish(source, topic, data)
 	if origin == "" && ht.Servers != nil {
 		for srv := range ht.Servers.Iter() {
+			if ht.fanoutLimit != nil {
+				ht.fanoutLimit <- struct{}{} // wait for a slot
+			}
 			go ht.publishToServer(srv, source, topic, data)
 		}
 	}

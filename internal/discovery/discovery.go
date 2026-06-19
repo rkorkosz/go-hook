@@ -6,7 +6,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -73,15 +75,45 @@ func (s *Discovery) Run(ctx context.Context) error {
 		return err
 	}
 	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
 		buf := make([]byte, 50)
+		// Set a read deadline so the loop can check ctx periodically.
+		pc.SetReadDeadline(time.Now().Add(time.Second))
+
 		n, _, err := pc.ReadFrom(buf)
 		if err != nil {
-			return err
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				// Timeout from SetReadDeadline — loop back to check ctx.
+				continue
+			}
+			if ctx.Err() != nil {
+				return nil
+			}
+			// Transient network error — wait and retry.
+			s.Log.Printf("Discovery read error: %v, retrying...", err)
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(500 * time.Millisecond):
+			}
+			continue
 		}
+
 		server := string(buf[:n])
 		if _, ok := s.db[server]; !ok && server != s.Current {
 			s.db[string(buf[:n])] = struct{}{}
-			s.Log.Printf("Servers: %s", s.db)
+
+			// Build a human-readable server list for logging.
+			var servers []string
+			for srv := range s.db {
+				servers = append(servers, srv)
+			}
+			s.Log.Printf("Servers: %s", strings.Join(servers, ", "))
 
 			_, err = pc.WriteTo([]byte(s.Current), addr)
 			if err != nil {
