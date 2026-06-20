@@ -73,7 +73,11 @@ func TestTCPPublishesToSubscriber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = subConn.Close() }()
+	defer func() {
+		if err := subConn.Close(); err != nil {
+			t.Logf("Error closing subscriber connection: %v", err)
+		}
+	}()
 	if err := json.NewEncoder(subConn).Encode(pubsub.Data{Source: "subscriber", Topic: "topic"}); err != nil {
 		t.Fatal(err)
 	}
@@ -82,12 +86,18 @@ func TestTCPPublishesToSubscriber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = pubConn.Close() }()
+	defer func() {
+		if err := pubConn.Close(); err != nil {
+			t.Logf("Error closing publisher connection: %v", err)
+		}
+	}()
 	if err := json.NewEncoder(pubConn).Encode(pubsub.Data{Source: "source", Topic: "topic", Data: []byte(`{"hello":"world"}`)}); err != nil {
 		t.Fatal(err)
 	}
 
-	_ = subConn.SetReadDeadline(time.Now().Add(time.Second))
+	if err := subConn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Logf("Error setting read deadline: %v", err)
+	}
 	var got pubsub.Data
 	if err := json.NewDecoder(subConn).Decode(&got); err != nil {
 		t.Fatal(err)

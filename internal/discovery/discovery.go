@@ -1,3 +1,4 @@
+// Package discovery provides server discovery over UDP.
 package discovery
 
 import (
@@ -23,7 +24,10 @@ type Discovery struct {
 
 // New creates discovery object
 func New(opts ...func(d *Discovery)) *Discovery {
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
 	d := Discovery{
 		Current: fmt.Sprintf("http://%s:8000", hostname),
 		db:      make(map[string]struct{}),
@@ -65,7 +69,11 @@ func (s *Discovery) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = pc.Close() }()
+	defer func() {
+		if err := pc.Close(); err != nil {
+			s.Log.Printf("Error closing packet conn: %v", err)
+		}
+	}()
 	addr, err := net.ResolveUDPAddr("udp", "255.255.255.255:8829")
 	if err != nil {
 		return err
@@ -83,7 +91,9 @@ func (s *Discovery) Run(ctx context.Context) error {
 
 		buf := make([]byte, 50)
 		// Set a read deadline so the loop can check ctx periodically.
-		pc.SetReadDeadline(time.Now().Add(time.Second))
+		if err := pc.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+			s.Log.Printf("Error setting read deadline: %v, retrying...", err)
+		}
 
 		n, _, err := pc.ReadFrom(buf)
 		if err != nil {

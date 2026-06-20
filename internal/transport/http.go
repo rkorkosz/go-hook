@@ -1,3 +1,4 @@
+// Package transport provides HTTP and TCP transport layers for pub/sub.
 package transport
 
 import (
@@ -28,7 +29,10 @@ type HTTP struct {
 // NewHTTP creates HTTP object with sensible defaults
 func NewHTTP(opts ...func(ht *HTTP)) *HTTP {
 	ht := &HTTP{
-		Server: &http.Server{Addr: ":8000"},
+		Server: &http.Server{
+			Addr:              ":8000",
+			ReadHeaderTimeout: 10 * time.Second,
+		},
 		PubSub: pubsub.New(100),
 		Log:    log.New(os.Stdout, "[HTTP] ", log.LstdFlags),
 		remoteClient: &http.Client{
@@ -83,6 +87,7 @@ func (ht *HTTP) publishToServer(server, source, topic string, data []byte) {
 	}
 
 	uri := fmt.Sprintf("%s/%s/%s", server, topic, source)
+	// #nosec G704 -- uri comes from internal server list, not user input
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(data))
 	if err != nil {
 		ht.Log.Println(err)
@@ -101,12 +106,17 @@ func (ht *HTTP) publishToServer(server, source, topic string, data []byte) {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	// #nosec G704 -- req comes from internal server list, not user input
 	resp, err := client.Do(req)
 	if err != nil {
 		ht.Log.Println(err)
 		return
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			ht.Log.Printf("Error closing response body: %v", err)
+		}
+	}()
 
 	ht.Log.Printf("Publish status code: %d", resp.StatusCode)
 }
@@ -146,7 +156,10 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			_ = enc.Encode(m)
+			if err := enc.Encode(m); err != nil {
+				ht.Log.Println(err)
+				return
+			}
 			if err := rc.Flush(); err != nil {
 				ht.Log.Println(err)
 				return
@@ -160,7 +173,11 @@ func (ht *HTTP) subscribe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ht *HTTP) publish(w http.ResponseWriter, r *http.Request) {
-	defer func() { _ = r.Body.Close() }()
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			ht.Log.Printf("Error closing request body: %v", err)
+		}
+	}()
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
 		ht.Log.Println(err)

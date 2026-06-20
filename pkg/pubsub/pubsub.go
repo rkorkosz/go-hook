@@ -1,3 +1,4 @@
+// Package pubsub provides an in-memory publish/subscribe implementation.
 package pubsub
 
 import (

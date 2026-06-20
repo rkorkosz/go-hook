@@ -1,3 +1,4 @@
+// Package transport provides HTTP and TCP transport layers for pub/sub.
 package transport
 
 import (
@@ -75,8 +76,12 @@ func (t *TCP) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		_ = t.subListener.Close()
-		_ = t.pubListener.Close()
+		if err := t.subListener.Close(); err != nil {
+			t.Log.Printf("Error closing subscriber listener: %v", err)
+		}
+		if err := t.pubListener.Close(); err != nil {
+			t.Log.Printf("Error closing publisher listener: %v", err)
+		}
 		return nil
 	case err := <-errCh:
 		return err
@@ -106,7 +111,11 @@ func (t *TCP) run(ctx context.Context, errCh chan error, handle func(net.Conn), 
 }
 
 func (t *TCP) handlePub(conn net.Conn) {
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Log.Printf("Error closing connection: %v", err)
+		}
+	}()
 	dec := json.NewDecoder(conn)
 	for {
 		var data pubsub.Data
@@ -122,7 +131,11 @@ func (t *TCP) handlePub(conn net.Conn) {
 }
 
 func (t *TCP) handleSub(conn net.Conn) {
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Log.Printf("Error closing connection: %v", err)
+		}
+	}()
 
 	var data pubsub.Data
 	if err := json.NewDecoder(conn).Decode(&data); err != nil {
@@ -141,7 +154,9 @@ func (t *TCP) handleSub(conn net.Conn) {
 
 	connDone := make(chan struct{})
 	go func() {
-		_, _ = io.Copy(io.Discard, conn)
+		if _, err := io.Copy(io.Discard, conn); err != nil {
+			t.Log.Println(err)
+		}
 		close(connDone)
 	}()
 
